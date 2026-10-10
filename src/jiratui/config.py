@@ -2,7 +2,7 @@ from contextvars import ContextVar
 import os
 from pathlib import Path
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -81,10 +81,10 @@ class StylingConfiguration(BaseModel):
 class ApplicationConfiguration(BaseSettings):
     """The configuration for the JiraTUI application and CLI tool."""
 
-    jira_api_username: str
-    """The username to use for connecting to the Jira API."""
-    jira_api_token: SecretStr
-    """The token to use for connecting to the Jira API."""
+    jira_api_username: str = ''
+    """The username to use for connecting to the Jira API. Not needed when `use_mcp` is `True`."""
+    jira_api_token: SecretStr = SecretStr('')
+    """The token to use for connecting to the Jira API. Not needed when `use_mcp` is `True`."""
     jira_api_base_url: str
     """The base URL of the Jira API."""
     jira_api_version: int = DEFAULT_JIRA_API_VERSION
@@ -97,6 +97,18 @@ class ApplicationConfiguration(BaseSettings):
     use_cert_authentication: bool = False
     """Set this to `True` if your Jira instance uses certificate-based authentication instead of Bearer authentication
     or Basic authentication."""
+    use_mcp: bool = False
+    """Set this to `True` to connect to Jira Cloud through the Atlassian Remote MCP server instead of the REST API.
+    This does not require an API token: the first time the application runs it opens the browser so you can authorize
+    it with your Atlassian account. Some features (attachments, deleting items, sprints) are not available."""
+    mcp_server_url: str = 'https://mcp.atlassian.com/v1/mcp'
+    """The URL of the Atlassian Remote MCP server. Only used when `use_mcp` is `True`."""
+    mcp_oauth_callback_port: int = 33418
+    """The localhost port that receives the OAuth authorization code when logging in. Only used when `use_mcp` is
+    `True`."""
+    mcp_cloud_id: str | None = None
+    """The cloud ID (or site hostname) of your Jira site. Defaults to the hostname of `jira_api_base_url`. Only used
+    when `use_mcp` is `True`."""
     jira_user_group_id: str | None = None
     """**[DEPRECATED]** The ID of the group that contains all (or most) of the Jira users in your Jira installation. This
     value is used as a fall back mechanism to fetch available users. This is only supported in the Jira Cloud
@@ -282,6 +294,18 @@ class ApplicationConfiguration(BaseSettings):
     model_config = SettingsConfigDict(
         extra='allow',
     )
+
+    @model_validator(mode='after')
+    def _require_api_credentials(self) -> 'ApplicationConfiguration':
+        if (
+            not self.use_mcp
+            and not self.use_cert_authentication
+            and not self.jira_api_token.get_secret_value()
+        ):
+            raise ValueError(
+                'jira_api_token is required unless use_mcp or use_cert_authentication is enabled.'
+            )
+        return self
 
     @classmethod
     def settings_customise_sources(

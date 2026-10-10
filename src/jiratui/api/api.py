@@ -10,6 +10,8 @@ import httpx
 import puremagic
 
 from jiratui.api.client import AsyncJiraClient, JiraClient, JiraTUIAsyncHTTPClient
+from jiratui.api.mcp_client import McpJiraClient, McpUnsupportedClient
+from jiratui.api.mcp_session import AtlassianMcpSession
 from jiratui.api.utils import build_issue_search_jql
 from jiratui.config import ApplicationConfiguration
 from jiratui.constants import (
@@ -2081,3 +2083,39 @@ class JiraSoftwareCloudAPI:
                     sprints.extend(values)
             return sprints
         return []
+
+
+def _mcp_cloud_id(configuration: ApplicationConfiguration) -> str:
+    if configuration.mcp_cloud_id:
+        return configuration.mcp_cloud_id
+    return urlsplit(configuration.jira_api_base_url).hostname or configuration.jira_api_base_url
+
+
+class JiraMcpAPI(JiraAPI):
+    """The Jira Cloud Platform API (v3) served through the Atlassian Remote MCP server instead of the REST API.
+
+    It reuses all the request-building logic of `JiraAPI`; only the transport is replaced (see
+    `jiratui.api.mcp_client`).
+    """
+
+    def __init__(self, session: AtlassianMcpSession, configuration: ApplicationConfiguration):
+        self._client = McpJiraClient(  # type:ignore[assignment]
+            session, _mcp_cloud_id(configuration), configuration.jira_api_base_url
+        )
+        self._sync_client = McpUnsupportedClient()  # type:ignore[assignment]
+        self._async_http_client = McpUnsupportedClient()  # type:ignore[assignment]
+        self._base_url = configuration.jira_api_base_url
+        self.cloud = True
+        self.logger = JiraTUILogger(logging.getLogger(LOGGER_NAME), configuration.enable_logging)
+
+
+class JiraSoftwareCloudMcpAPI(JiraSoftwareCloudAPI):
+    """The Jira Software Cloud API served through the Atlassian MCP server, which has no tools for boards or sprints:
+    every board/sprint request returns an empty page."""
+
+    def __init__(self, session: AtlassianMcpSession, configuration: ApplicationConfiguration):
+        self._client = McpJiraClient(  # type:ignore[assignment]
+            session, _mcp_cloud_id(configuration), configuration.jira_api_base_url
+        )
+        self._base_url = configuration.jira_api_base_url
+        self.logger = JiraTUILogger(logging.getLogger(LOGGER_NAME), configuration.enable_logging)

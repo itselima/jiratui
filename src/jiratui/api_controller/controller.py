@@ -13,7 +13,15 @@ from typing import Any
 
 from dateutil.parser import isoparse  # type:ignore[import-untyped]
 
-from jiratui.api.api import JiraAPI, JiraAPIv2, JiraDataCenterAPI, JiraSoftwareCloudAPI
+from jiratui.api.api import (
+    JiraAPI,
+    JiraAPIv2,
+    JiraDataCenterAPI,
+    JiraMcpAPI,
+    JiraSoftwareCloudAPI,
+    JiraSoftwareCloudMcpAPI,
+)
+from jiratui.api.mcp_session import AtlassianMcpSession
 from jiratui.api_controller.constants import (
     MAXIMUM_PAGE_NUMBER_LIST_GROUPS,
     MAXIMUM_PAGE_NUMBER_SEARCH_PROJECTS,
@@ -95,8 +103,18 @@ class APIController:
         self.config = CONFIGURATION.get() if not configuration else configuration
         self.api_version: int = self.config.jira_api_version or DEFAULT_JIRA_API_VERSION
         self.api: JiraAPI
-        # initialize the API depending on whether we are connecting to Jira Cloud or Jira DC platform
-        if self.config.cloud:
+        # initialize the API depending on whether we are connecting through the Atlassian MCP server, to Jira Cloud or
+        # to Jira DC platform
+        if use_mcp := getattr(self.config, 'use_mcp', False) is True:
+            mcp_session = AtlassianMcpSession(
+                server_url=self.config.mcp_server_url,
+                callback_port=self.config.mcp_oauth_callback_port,
+            )
+            self.api = JiraMcpAPI(mcp_session, self.config)
+            self.jira_software_cloud_api: JiraSoftwareCloudAPI = JiraSoftwareCloudMcpAPI(
+                mcp_session, self.config
+            )
+        elif self.config.cloud:
             if self.api_version == 2:
                 # sets up the Jira Cloud Platform REST API v2
                 self.api = JiraAPIv2(
@@ -123,12 +141,13 @@ class APIController:
             )
         # set up the Jira Software Cloud REST API. This API is used to retrieve certain information from Jira that is
         # not available in the Jira Cloud Platform or Jira DC APIs.
-        self.jira_software_cloud_api = JiraSoftwareCloudAPI(
-            base_url=self.config.jira_api_base_url,
-            api_username=self.config.jira_api_username,
-            api_token=self.config.jira_api_token.get_secret_value(),
-            configuration=self.config,
-        )
+        if not use_mcp:
+            self.jira_software_cloud_api = JiraSoftwareCloudAPI(
+                base_url=self.config.jira_api_base_url,
+                api_username=self.config.jira_api_username,
+                api_token=self.config.jira_api_token.get_secret_value(),
+                configuration=self.config,
+            )
         self.skip_users_without_email = self.config.ignore_users_without_email
         self.logger = JiraTUILogger(logging.getLogger(LOGGER_NAME), self.config.enable_logging)
         self._required_fields_cache: dict[str, list[str]] = {}
