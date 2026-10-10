@@ -1,5 +1,19 @@
 # JiraTUI
 
+> [!NOTE]
+> **This is a fork of [whyisdifficult/jiratui](https://github.com/whyisdifficult/jiratui)** by Gaston Tagni, licensed
+> under MIT. It adds one feature: connecting to Jira Cloud through the
+> [Atlassian Remote MCP server](https://www.atlassian.com/platform/remote-mcp-server) instead of the REST API, so it
+> works **without an API token**. You log in once with your Atlassian account in the browser (OAuth).
+>
+> - Enable it with `use_mcp: true` in your config, then run `jiratui mcp login`. See **[MCP.md](MCP.md)** for setup, the
+>   features that are not available through MCP (attachments, deleting items, sprints) and how it works.
+> - Without `use_mcp`, JiraTUI behaves exactly like the original.
+> - Install from this fork, not from PyPI/Homebrew (those install the original):
+>   `uv tool install git+https://github.com/itselima/jiratui@mcp-transport`
+>
+> Everything below is the original README.
+
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/whyisdifficult/jiratui/.github%2Fworkflows%2Ftest.yaml)
 [![CodeQL](https://github.com/whyisdifficult/jiratui/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/whyisdifficult/jiratui/actions/workflows/github-code-scanning/codeql)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/jiratui)

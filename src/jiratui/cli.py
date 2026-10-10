@@ -62,6 +62,52 @@ def configure():
     pass
 
 
+@cli.group(
+    help='Use it to log in to Jira through the Atlassian MCP server (when use_mcp is enabled).'
+)
+def mcp():
+    pass
+
+
+@mcp.command(
+    'login', help='Authorizes JiraTUI with your Atlassian account and stores the OAuth tokens.'
+)
+def mcp_login() -> None:
+    from jiratui.api.mcp_session import AtlassianMcpSession
+
+    console = Console()
+    settings = ApplicationConfiguration()  # type: ignore[call-arg]
+    session = AtlassianMcpSession(
+        server_url=settings.mcp_server_url, callback_port=settings.mcp_oauth_callback_port
+    )
+
+    async def login() -> dict:
+        try:
+            return await session.call_tool('atlassianUserInfo', {})
+        finally:
+            await session.close()
+
+    try:
+        user = asyncio.run(login())
+    except Exception as e:
+        console.print(f'[red]Login failed:[/red] {e}')
+        sys.exit(1)
+    console.print(
+        f'Logged in to the Atlassian MCP server as {user.get("name")} ({user.get("email")}).'
+    )
+    console.print(f'Tokens stored in {session.storage.path}')
+
+
+@mcp.command('logout', help='Deletes the stored OAuth tokens and client registration.')
+def mcp_logout() -> None:
+    from jiratui.api.mcp_session import FileTokenStorage
+    from jiratui.files import get_config_directory
+
+    storage = FileTokenStorage(get_config_directory() / 'mcp-oauth.json')
+    storage.clear()
+    Console().print(f'Removed {storage.path}')
+
+
 @cli.command('version', help='Shows the version of the tool.')
 def version():
     from importlib.metadata import version
